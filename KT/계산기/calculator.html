@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=320, initial-scale=1.0">
+    <title>iPhone 스타일 계산기</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+        body {
+            background: linear-gradient(135deg, #232526 0%, #414345 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .calculator {
+            width: 320px;
+            background: #18191a;
+            border-radius: 40px;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37), 0 2px 8px rgba(0,0,0,0.25);
+            padding: 24px 24px 36px 24px;
+            font-family: 'Roboto', 'Apple SD Gothic Neo', Arial, sans-serif;
+            border: 1.5px solid #2223;
+        }
+        .display {
+            width: 100%;
+            height: 72px;
+            background: #222;
+            color: #fff;
+            font-size: 2.7em;
+            font-family: 'Roboto', 'Apple SD Gothic Neo', Arial, sans-serif;
+            text-align: right;
+            border: none;
+            border-radius: 18px;
+            margin-bottom: 22px;
+            padding: 0 18px;
+            box-sizing: border-box;
+            box-shadow: 0 2px 8px #0004 inset;
+            letter-spacing: 1px;
+        }
+        .buttons {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 14px;
+        }
+        .btn {
+            width: 64px;
+            height: 64px;
+            font-size: 1.5em;
+            font-weight: 500;
+            border: none;
+            border-radius: 50%;
+            background: #333;
+            color: #fff;
+            cursor: pointer;
+            transition: background 0.15s, box-shadow 0.15s, color 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            box-shadow: 0 2px 8px #0002;
+            user-select: none;
+        }
+        .btn:active {
+            background: #444;
+            box-shadow: 0 1px 2px #0002;
+        }
+        .btn.orange {
+            background: linear-gradient(135deg, #ffb300 0%, #ff9500 100%);
+            color: #fff;
+            font-weight: 700;
+            box-shadow: 0 2px 8px #ff950044;
+        }
+        .btn.gray {
+            background: linear-gradient(135deg, #d4d4d2 0%, #bcbcbc 100%);
+            color: #222;
+            font-weight: 700;
+        }
+        .btn.zero {
+            grid-column: span 2;
+            width: 144px;
+            border-radius: 32px;
+            text-align: left;
+            padding-left: 36px;
+            justify-content: flex-start;
+        }
+        /* 버튼 텍스트 선택 방지 */
+        button::-moz-focus-inner { border: 0; }
+        button:focus { outline: none; }
+    </style>
+</head>
+<body>
+    <div class="calculator">
+        <input class="display" type="text" value="0" readonly />
+        <div class="buttons">
+            <button class="btn gray">C</button>
+            <button class="btn gray">+/-</button>
+            <button class="btn gray">%</button>
+            <button class="btn orange">÷</button>
+
+            <button class="btn">7</button>
+            <button class="btn">8</button>
+            <button class="btn">9</button>
+            <button class="btn orange">×</button>
+
+            <button class="btn">4</button>
+            <button class="btn">5</button>
+            <button class="btn">6</button>
+            <button class="btn orange">-</button>
+
+            <button class="btn">1</button>
+            <button class="btn">2</button>
+            <button class="btn">3</button>
+            <button class="btn orange">+</button>
+
+            <button class="btn zero">0</button>
+            <button class="btn">.</button>
+            <button class="btn orange">=</button>
+        </div>
+    </div>
+    <script>
+        const display = document.querySelector('.display');
+        let firstOperand = null;
+        let operator = null;
+        let waitingForSecondOperand = false;
+
+        function inputDigit(digit) {
+            if (display.value === '0' || waitingForSecondOperand) {
+                display.value = digit;
+                waitingForSecondOperand = false;
+            } else {
+                display.value += digit;
+            }
+        }
+
+        function inputDot() {
+            if (waitingForSecondOperand) {
+                display.value = '0.';
+                waitingForSecondOperand = false;
+                return;
+            }
+            if (!display.value.includes('.')) {
+                display.value += '.';
+            }
+        }
+
+        function handleOperator(nextOperator) {
+            const inputValue = parseFloat(display.value);
+            if (operator && waitingForSecondOperand) {
+                operator = nextOperator;
+                return;
+            }
+            if (firstOperand == null) {
+                firstOperand = inputValue;
+            } else if (operator) {
+                const result = performCalculation(operator, firstOperand, inputValue);
+                display.value = String(result);
+                firstOperand = result;
+            }
+            operator = nextOperator;
+            waitingForSecondOperand = true;
+        }
+
+        function performCalculation(operator, first, second) {
+            switch (operator) {
+                case '+': return first + second;
+                case '-': return first - second;
+                case '×': return first * second;
+                case '÷': return second !== 0 ? first / second : 'Error';
+                default: return second;
+            }
+        }
+
+        function resetCalculator() {
+            display.value = '0';
+            firstOperand = null;
+            operator = null;
+            waitingForSecondOperand = false;
+        }
+
+        function inputPercent() {
+            let value = parseFloat(display.value);
+            value = value / 100;
+            display.value = String(value);
+        }
+
+        function toggleSign() {
+            let value = parseFloat(display.value);
+            value = -value;
+            display.value = String(value);
+        }
+
+        document.querySelectorAll('.btn').forEach(btn => {
+            btn.addEventListener('click', e => {
+                const text = btn.textContent;
+                if (!isNaN(text)) {
+                    inputDigit(text);
+                } else if (text === '.') {
+                    inputDot();
+                } else if (text === '+' || text === '-' || text === '×' || text === '÷') {
+                    handleOperator(text);
+                } else if (text === '=') {
+                    if (operator) {
+                        handleOperator(operator);
+                        operator = null;
+                    }
+                } else if (text === 'C') {
+                    resetCalculator();
+                } else if (text === '%') {
+                    inputPercent();
+                } else if (text === '+/-') {
+                    toggleSign();
+                }
+            });
+        });
+    </script>
+</body>
+</html> 

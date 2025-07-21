@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>앵그리버드 (HTML)</title>
+  <style>
+    body { margin:0; background:#222; }
+    #game {
+      display:block;
+      margin:0 auto;
+      background: #87ceeb;
+      border: 2px solid #444;
+      box-shadow: 0 0 20px #0008;
+    }
+    #info {
+      color: #222;
+      font-family: 'Malgun Gothic', sans-serif;
+      font-size: 20px;
+      text-align: center;
+      margin: 10px 0 0 0;
+    }
+  </style>
+</head>
+<body>
+  <div id="start-screen" style="position:fixed;left:0;top:0;width:100vw;height:100vh;background:#7ec6f7;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+    <div style="text-align:center;">
+      <img src="시작이미지.png" style="max-width:90vw;max-height:80vh;border-radius:24px;box-shadow:0 4px 32px #2228;">
+      <br>
+      <button id="play-btn" style="margin-top:40px;font-size:40px;padding:16px 60px;background:#fff;border:4px solid #222;border-radius:18px;box-shadow:2px 2px 0 #222;cursor:pointer;">PLAY</button>
+    </div>
+  </div>
+  <div id="score" style="position:absolute;top:18px;left:0;width:100vw;text-align:center;font-size:36px;font-family:sans-serif;font-weight:bold;color:#fff;text-shadow:2px 2px 8px #222,0 0 8px #000;z-index:2;">0</div>
+  <canvas id="game" width="1200" height="600"></canvas>
+  <div id="info">마우스로 새총을 당겨서 발사하세요! (R: 리셋)</div>
+  <script>
+// --- 설정값 ---
+const WIDTH = 1200, HEIGHT = 600;
+const SLING_X = 150, SLING_Y = HEIGHT - 150;
+const GRAVITY = 0.5;
+const BIRD_IMG_URL = 'https://i.namu.wiki/i/GnBAlUWDl8Js1StMnuzyfkkJR62gouPvWZTxL3HvKrnQRi9HgMdcGB9QHJGK-X52tZyQPexat_fj7rlRXlD1EA.webp';
+const HAMBURGER_IMG_URL = 'https://i.namu.wiki/i/4-iX1WOxRnJOYQXM1IzJYwAeHtDRGv4HnO6xR0s6ZpsiltAmpO_RC7oyPXy9vIOYrFjapiqUhgZFH0O96h8g4w.webp';
+const BG_IMG_URL = 'https://i.pinimg.com/736x/2c/24/ba/2c24ba2e0e1a2455cccc366a96efcbf0.jpg';
+const SLINGSHOT_IMG_URL = 'https://static.wikia.nocookie.net/angrybirds/images/4/4e/Slingshot_Classic.png/revision/latest?cb=20241028062743';
+const SLINGSHOT_IMG_WIDTH = 100;
+const SLINGSHOT_IMG_HEIGHT = 180;
+
+// --- 캔버스/컨텍스트 ---
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+// --- 오브젝트 ---
+let birdImg = new Image();
+birdImg.src = BIRD_IMG_URL;
+let hamburgerImg = new Image();
+hamburgerImg.src = HAMBURGER_IMG_URL;
+let bgImg = new Image();
+bgImg.src = BG_IMG_URL;
+// let bgImgLoaded = false;
+let slingshotImg = new Image();
+slingshotImg.src = SLINGSHOT_IMG_URL;
+// let slingshotImgLoaded = false;
+slingshotImg.onload = () => { slingshotImgLoaded = true; tryStartGame(); };
+
+class Bird {
+  constructor(x, y) {
+    this.init_x = x;
+    this.init_y = y;
+    this.x = x;
+    this.y = y;
+    this.radius = 22;
+    this.vel_x = 0;
+    this.vel_y = 0;
+    this.launched = false;
+    this.trail = [];
+    this.angle = 0;
+    this.angularVel = 0;
+  }
+  draw(camera_x) {
+    // 궤적(점선) 완전히 제거
+    // 새 이미지 (회전)
+    ctx.save();
+    ctx.translate(this.x - camera_x, this.y);
+    ctx.rotate(this.angle);
+    ctx.drawImage(birdImg, -this.radius, -this.radius, 44, 44);
+    ctx.restore();
+  }
+  update() {
+    if (this.launched) {
+      // this.trail.push([this.x, this.y]); // trail 저장도 제거
+      if (this.trail.length > 40) this.trail.shift();
+      // 공기 저항
+      this.vel_x *= 0.985;
+      this.vel_y *= 0.985;
+      // 중력
+      this.x += this.vel_x;
+      this.y += this.vel_y;
+      this.vel_y += GRAVITY;
+      // 회전(속도 방향에 따라)
+      this.angle = Math.atan2(this.vel_y, this.vel_x);
+    }
+  }
+  reset() {
+    this.x = this.init_x;
+    this.y = this.init_y;
+    this.vel_x = 0;
+    this.vel_y = 0;
+    this.launched = false;
+    this.trail = [];
+    this.angle = 0;
+  }
+}
+
+// --- Block 클래스 수정: 햄버거 블록 + 물리효과 ---
+class Block {
+  constructor(x, y, w, h) {
+    this.x = x;
+    this.y = y;
+    this.w = w;
+    this.h = h;
+    this.alive = true;
+    this.falling = false;
+    this.vy = 0;
+    this.vx = 0;
+    this.angle = 0;
+    this.angularVel = 0;
+    this.parent = null; // 아래 블록
+    this.children = []; // 위 블록들
+  }
+  draw(camera_x) {
+    if (!this.alive && !this.falling) return;
+    ctx.save();
+    ctx.translate(this.x + this.w/2 - camera_x, this.y + this.h/2);
+    ctx.rotate(this.angle);
+    ctx.drawImage(hamburgerImg, -this.w/2, -this.h/2, this.w, this.h);
+    ctx.restore();
+  }
+  collide(bird) {
+    if (!this.alive) return false;
+    let bx = bird.x, by = bird.y;
+    if (this.x < bx && bx < this.x + this.w && this.y < by && by < this.y + this.h) {
+      this.fallCascade();
+      addScore(10); // 햄버거 쓰러트릴 때 10점 추가
+      return true;
+    }
+    return false;
+  }
+  fallCascade() {
+    if (!this.alive) return;
+    this.alive = false;
+    this.falling = true;
+    this.vy = Math.random()*4 + 2;
+    this.vx = (Math.random()<0.5 ? -1 : 1) * (Math.random()*2+1);
+    this.angularVel = (Math.random()-0.5)*0.2;
+    addScore(10); // 연쇄로 무너질 때도 10점 추가
+    // 위에 쌓인 블록들도 같이 무너짐
+    for (let child of this.children) {
+      child.fallCascade();
+    }
+  }
+  update() {
+    if (this.falling) {
+      this.y += this.vy;
+      this.x += this.vx;
+      this.angle += this.angularVel;
+      this.vy += 0.4;
+      if (this.y > HEIGHT-50-this.h/2) {
+        this.y = HEIGHT-50-this.h/2;
+        this.vy = 0;
+        this.vx *= 0.95;
+        this.angularVel *= 0.95;
+        if (Math.abs(this.vx)<0.1 && Math.abs(this.angularVel)<0.01) {
+          this.falling = false;
+        }
+      }
+    }
+  }
+}
+
+// 랜덤 구조물 생성
+function makeHamburgerTower() {
+  let arr = [];
+  let baseX = 700 + Math.floor(Math.random()*300);
+  let baseY = HEIGHT-100;
+  let w=60, h=60;
+  let cols = 2 + Math.floor(Math.random()*2); // 2~3열
+  let rows = 3 + Math.floor(Math.random()*3); // 3~5층
+  let grid = [];
+  for (let c=0; c<cols; c++) grid[c] = [];
+  for (let r=0; r<rows; r++) {
+    for (let c=0; c<cols; c++) {
+      if (Math.random()<0.8 || r==0) { // 아래층은 무조건, 위는 랜덤
+        let bx = baseX + c*w;
+        let by = baseY - r*h;
+        let block = new Block(bx, by, w, h);
+        arr.push(block);
+        grid[c][r] = block;
+        // parent/children 연결
+        if (r>0 && grid[c][r-1]) {
+          block.parent = grid[c][r-1];
+          grid[c][r-1].children.push(block);
+        }
+      }
+    }
+  }
+  return arr;
+}
+
+// --- 새총 그리기 ---
+function drawSlingshot(camera_x) {
+  if (slingshotImgLoaded) {
+    ctx.drawImage(
+      slingshotImg,
+      SLING_X - camera_x - SLINGSHOT_IMG_WIDTH/2,
+      SLING_Y - SLINGSHOT_IMG_HEIGHT + 80,
+      SLINGSHOT_IMG_WIDTH,
+      SLINGSHOT_IMG_HEIGHT
+    );
+  }
+  // 고무줄
+  ctx.strokeStyle = '#b23a48';
+  ctx.lineWidth = 8;
+  ctx.beginPath();
+  ctx.moveTo(RUBBER_LEFT_X - camera_x, RUBBER_LEFT_Y);
+  if (!bird.launched && dragging) {
+    ctx.lineTo(bird.x - camera_x, bird.y);
+  } else {
+    // 발사 후에는 고무줄이 중앙 고정점으로
+    ctx.lineTo((RUBBER_LEFT_X + RUBBER_RIGHT_X)/2 - camera_x, (RUBBER_LEFT_Y + RUBBER_RIGHT_Y)/2);
+  }
+  ctx.lineTo(RUBBER_RIGHT_X - camera_x, RUBBER_RIGHT_Y);
+  ctx.stroke();
+}
+
+// --- Retry 버튼 ---
+let retryTimeout = null;
+function showRetryButton() {
+  let btn = document.createElement('button');
+  btn.textContent = 'Retry';
+  btn.style.position = 'absolute';
+  btn.style.left = '50%';
+  btn.style.top = '60%';
+  btn.style.transform = 'translate(-50%, -50%)';
+  btn.style.fontSize = '2em';
+  btn.style.padding = '16px 40px';
+  btn.style.background = '#ffb347';
+  btn.style.border = '2px solid #222';
+  btn.style.borderRadius = '16px';
+  btn.style.cursor = 'pointer';
+  btn.onclick = () => {
+    btn.remove();
+    resetGame();
+  };
+  document.body.appendChild(btn);
+}
+
+// --- 게임 상태 변수 ---
+let bird = new Bird(SLING_X, SLING_Y);
+let blocks = makeHamburgerTower();
+let dragging = false;
+let camera_x = 0;
+let cameraLocked = false;
+let score = 0;
+function addScore(val) {
+  score += val;
+  document.getElementById('score').textContent = score;
+}
+
+// 고무줄 끝점 좌표(일직선)
+const RUBBER_LEFT_X = SLING_X - 45;
+const RUBBER_LEFT_Y = SLING_Y - 60; // 원래 위치로 복구
+const RUBBER_RIGHT_X = SLING_X + 45;
+const RUBBER_RIGHT_Y = SLING_Y - 60; // 원래 위치로 복구
+
+// --- 리셋 함수 ---
+function resetGame() {
+  score = 0;
+  document.getElementById('score').textContent = score;
+  bird = new Bird(
+    (RUBBER_LEFT_X + RUBBER_RIGHT_X) / 2,
+    (RUBBER_LEFT_Y + RUBBER_RIGHT_Y) / 2 - 30 // 새만 30픽셀 위로
+  );
+  blocks = makeHamburgerTower();
+  dragging = false;
+  camera_x = 0;
+  cameraLocked = false;
+  document.getElementById('info').textContent = '마우스로 새총을 당겨서 발사하세요! (R: 리셋)';
+  if (retryTimeout) {
+    clearTimeout(retryTimeout);
+    retryTimeout = null;
+  }
+}
+
+// --- 마우스/키 이벤트 수정 ---
+canvas.addEventListener('mousedown', e => {
+  let mx = e.offsetX, my = e.offsetY;
+  if (!bird.launched && Math.hypot(mx - (SLING_X - camera_x), my - SLING_Y) < 40) {
+    dragging = true;
+  }
+});
+canvas.addEventListener('mouseup', e => {
+  if (dragging) {
+    dragging = false;
+    bird.launched = true;
+    let mx = e.offsetX, my = e.offsetY;
+    let dx = mx - ((RUBBER_LEFT_X + RUBBER_RIGHT_X) / 2 - camera_x);
+    let dy = my - ((RUBBER_LEFT_Y + RUBBER_RIGHT_Y) / 2);
+    let pull_len = Math.min(Math.hypot(dx, dy), 350);
+    if (pull_len > 0) {
+      let pull_angle = Math.atan2(dy, dx);
+      let power = Math.min(pull_len * 1, 60); // 기존 2 -> 1로 절반
+      bird.vel_x = -power * Math.cos(pull_angle) * 0.5;
+      bird.vel_y = -power * Math.sin(pull_angle) * 0.5;
+    }
+  }
+});
+canvas.addEventListener('mousemove', e => {
+  if (dragging) {
+    let mx = e.offsetX, my = e.offsetY;
+    let dx = mx - ((RUBBER_LEFT_X + RUBBER_RIGHT_X) / 2 - camera_x);
+    let dy = my - ((RUBBER_LEFT_Y + RUBBER_RIGHT_Y) / 2);
+    let pull_len = Math.min(Math.hypot(dx, dy), 350);
+    if (pull_len > 0) {
+      let pull_angle = Math.atan2(dy, dx);
+      bird.x = (RUBBER_LEFT_X + RUBBER_RIGHT_X) / 2 + Math.cos(pull_angle) * pull_len;
+      bird.y = (RUBBER_LEFT_Y + RUBBER_RIGHT_Y) / 2 + Math.sin(pull_angle) * pull_len;
+    } else {
+      bird.x = (RUBBER_LEFT_X + RUBBER_RIGHT_X) / 2;
+      bird.y = (RUBBER_LEFT_Y + RUBBER_RIGHT_Y) / 2;
+    }
+  }
+});
+window.addEventListener('keydown', e => {
+  if (e.key === 'r' || e.key === 'R') {
+    resetGame();
+  }
+});
+
+// --- 배경, 구조물, 새총, 새, 안내문구, 카메라 ---
+function drawBackground() {
+  if (bgImgLoaded) {
+    ctx.drawImage(bgImg, 0, 0, WIDTH, HEIGHT);
+  } else {
+    ctx.fillStyle = '#87ceeb';
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+  }
+}
+
+// --- 메인 루프 ---
+function loop() {
+  // 새 위치 초기화
+  if (!bird.launched && !dragging) {
+    bird.x = SLING_X;
+    bird.y = SLING_Y;
+  }
+  // 새 업데이트
+  bird.update();
+  // 구조물 업데이트
+  for (let b of blocks) b.update();
+  // 충돌 체크
+  let hitBlock = false;
+  for (let b of blocks) {
+    if (b.collide(bird)) {
+      bird.vel_x *= 0.5;
+      bird.vel_y *= 0.5;
+      cameraLocked = true;
+      hitBlock = true;
+    }
+  }
+  // 카메라 이동
+  if (!cameraLocked && bird.launched) {
+    camera_x = Math.max(0, Math.floor(bird.x) - 200);
+    camera_x = Math.min(camera_x, 1000);
+  }
+  // 배경
+  drawBackground();
+  // 구조물
+  for (let b of blocks) b.draw(camera_x);
+  // 새총
+  drawSlingshot(camera_x);
+  // 새
+  bird.draw(camera_x);
+  // 안내문구
+  if (!bird.launched) {
+    document.getElementById('info').textContent = '마우스로 새총을 당겨서 발사하세요! (R: 리셋)';
+  } else if (bird.launched && bird.y > HEIGHT) {
+    cameraLocked = true;
+    document.getElementById('info').textContent = 'R키로 다시 시작하세요!';
+    if (!hitBlock && !retryTimeout) {
+      showRetryButton(); // 3초 대기 없이 즉시
+      retryTimeout = true; // 버튼 중복 방지용
+    }
+  }
+  requestAnimationFrame(loop);
+}
+
+// --- 시작 ---
+let birdImgLoaded = false, hamburgerImgLoaded = false, bgImgLoaded = false, slingshotImgLoaded = false;
+function tryStartGame() {
+  if (birdImgLoaded && hamburgerImgLoaded && bgImgLoaded && slingshotImgLoaded) loop();
+}
+birdImg.onload = () => { birdImgLoaded = true; tryStartGame(); };
+hamburgerImg.onload = () => { hamburgerImgLoaded = true; tryStartGame(); };
+bgImg.onload = () => { bgImgLoaded = true; tryStartGame(); };
+document.getElementById('play-btn').onclick = function() {
+  document.getElementById('start-screen').style.display = 'none';
+};
+  </script>
+</body>
+</html> 
