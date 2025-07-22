@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* 메인 버튼 스타일 */
+.main-btn {
+  display: inline-block;
+  padding: 12px 32px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 18px;
+  text-decoration: none;
+  transition: background 0.2s, color 0.2s, border 0.2s;
+}
+.main-btn--primary {
+  background: #6366f1;
+  color: #fff;
+  border: none;
+  box-shadow: 0 2px 8px rgba(99,102,241,0.08);
+}
+.main-btn--primary:hover {
+  background: #4f46e5;
+}
+.main-btn--secondary {
+  background: #fff;
+  color: #6366f1;
+  border: 2px solid #6366f1;
+}
+.main-btn--secondary:hover {
+  background: #6366f1;
+  color: #fff;
+}
